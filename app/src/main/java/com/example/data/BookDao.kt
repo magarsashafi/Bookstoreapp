@@ -20,7 +20,7 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE id = :id LIMIT 1")
     suspend fun getBookByIdSync(id: String): BookEntity?
 
-    @Query("SELECT * FROM books WHERE isPurchased = 1 OR isDownloaded = 1 OR priceEtb = 0.0 OR isUserListed = 1 ORDER BY lastReadTimestamp DESC, title ASC")
+    @Query("SELECT * FROM books WHERE isPurchased = 1 OR isDownloaded = 1 OR priceEtb = 0.0 OR isUserListed = 1 OR shelfStatus != 'NONE' ORDER BY lastReadTimestamp DESC, title ASC")
     fun getLibraryBooks(): Flow<List<BookEntity>>
 
     @Query("SELECT * FROM books WHERE isDownloaded = 1 ORDER BY title ASC")
@@ -31,6 +31,16 @@ interface BookDao {
 
     @Query("SELECT * FROM books WHERE isUserListed = 1 ORDER BY title ASC")
     fun getUserListedBooks(): Flow<List<BookEntity>>
+
+    // Virtual Bookshelves
+    @Query("SELECT * FROM books WHERE shelfStatus = :shelf ORDER BY title ASC")
+    fun getBooksByShelf(shelf: String): Flow<List<BookEntity>>
+
+    @Query("UPDATE books SET shelfStatus = :shelf WHERE id = :bookId")
+    suspend fun updateShelfStatus(bookId: String, shelf: String)
+
+    @Query("UPDATE books SET userRating = :rating WHERE id = :bookId")
+    suspend fun updateUserRating(bookId: String, rating: Int)
 
     @Query("SELECT COUNT(*) FROM books")
     suspend fun getBooksCount(): Int
@@ -81,4 +91,39 @@ interface BookDao {
 
     @Query("SELECT SUM(amountEtb) FROM transactions")
     fun getTotalSalesRevenue(): Flow<Double?>
+
+    // Reviews & Ratings
+    @Query("SELECT * FROM reviews WHERE bookId = :bookId ORDER BY timestamp DESC")
+    fun getReviewsForBook(bookId: String): Flow<List<ReviewEntity>>
+
+    @Query("SELECT * FROM reviews ORDER BY timestamp DESC")
+    fun getAllReviews(): Flow<List<ReviewEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertReview(review: ReviewEntity)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertReviews(reviews: List<ReviewEntity>)
+
+    @Query("SELECT COUNT(*) FROM reviews WHERE bookId = :bookId")
+    suspend fun getReviewsCountForBook(bookId: String): Int
+
+    @Query("SELECT AVG(rating) FROM reviews WHERE bookId = :bookId")
+    suspend fun getAverageRatingForBook(bookId: String): Double?
+
+    @Query("UPDATE books SET rating = :newRating, reviewsCount = :newCount WHERE id = :bookId")
+    suspend fun updateBookRatingStats(bookId: String, newRating: Float, newCount: Int)
+
+    // User Profile
+    @Query("SELECT * FROM user_profiles LIMIT 1")
+    fun getUserProfile(): Flow<UserProfileEntity?>
+
+    @Query("SELECT * FROM user_profiles LIMIT 1")
+    suspend fun getUserProfileSync(): UserProfileEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertUserProfile(profile: UserProfileEntity)
+
+    @Update
+    suspend fun updateUserProfile(profile: UserProfileEntity)
 }

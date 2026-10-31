@@ -20,13 +20,18 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -35,6 +40,10 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,27 +53,35 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.BookEntity
 import com.example.ui.components.BookCoverCard
 import com.example.ui.components.CategoryChipRow
+import com.example.ui.viewmodel.RecommendedBook
+import com.example.ui.viewmodel.SearchSortOption
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExploreScreen(
     books: List<BookEntity>,
+    recommendedBooks: List<RecommendedBook>,
     searchQuery: String,
     selectedCategory: String,
+    sortOption: SearchSortOption,
     downloadingBookId: String?,
     onSearchChange: (String) -> Unit,
     onCategorySelected: (String) -> Unit,
+    onSortOptionChanged: (SearchSortOption) -> Unit,
     onBookClick: (BookEntity) -> Unit
 ) {
     val featuredBooks = books.take(4)
     val freeBooks = books.filter { it.priceEtb == 0.0 }
     val premiumBooks = books.filter { it.priceEtb > 0.0 }
+
+    var sortMenuExpanded by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier
@@ -79,9 +96,8 @@ fun ExploreScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
                     .clip(RoundedCornerShape(20.dp))
-                    .height(180.dp)
+                    .height(175.dp)
             ) {
-                // Background image from generated asset
                 Image(
                     painter = painterResource(id = R.drawable.banner_library),
                     contentDescription = "Mana Kitaabaa",
@@ -89,7 +105,6 @@ fun ExploreScreen(
                     contentScale = ContentScale.Crop
                 )
 
-                // Gradient overlay
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -97,7 +112,7 @@ fun ExploreScreen(
                             Brush.verticalGradient(
                                 colors = listOf(
                                     Color.Black.copy(alpha = 0.2f),
-                                    Color.Black.copy(alpha = 0.85f)
+                                    Color.Black.copy(alpha = 0.88f)
                                 )
                             )
                         )
@@ -128,7 +143,7 @@ fun ExploreScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Dubbisi, kuusi, buusi, fi daldali - beekumsi ifa jireenyaati!",
+                        text = "Mataduree, barreessaa, fi gosaan barbaadaa; gorsa kitaabaa argadhaa!",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFFF3F4F6)
                     )
@@ -136,40 +151,89 @@ fun ExploreScreen(
             }
         }
 
-        // Search Bar
+        // Robust Search Bar with Sort Filter Action
         item {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = onSearchChange,
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .testTag("search_books_input"),
-                placeholder = { Text("Kitaaba, barreessaa ykn mataduree barbaadi...") },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Barbaadi",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { onSearchChange("") }) {
-                            Icon(imageVector = Icons.Default.Clear, contentDescription = "Haqi")
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = onSearchChange,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("search_books_input"),
+                    placeholder = { Text("Mataduree, barreessaa, gosa...") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Barbaadi",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { onSearchChange("") }) {
+                                Icon(imageVector = Icons.Default.Clear, contentDescription = "Haqi")
+                            }
+                        }
+                    },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                        focusedContainerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Sort Filter Trigger
+                Box {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier
+                            .size(52.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { sortMenuExpanded = true }
+                            .testTag("sort_filter_button")
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.FilterList,
+                                contentDescription = "Tartiiba",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
-                },
-                shape = RoundedCornerShape(16.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                    focusedContainerColor = MaterialTheme.colorScheme.surface
-                ),
-                singleLine = true
-            )
+
+                    DropdownMenu(
+                        expanded = sortMenuExpanded,
+                        onDismissRequest = { sortMenuExpanded = false }
+                    ) {
+                        SearchSortOption.values().forEach { option ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = "${option.titleAfaanOromo} (${option.titleEnglish})",
+                                        fontWeight = if (sortOption == option) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                onClick = {
+                                    onSortOptionChanged(option)
+                                    sortMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
         }
 
-        // Category Chips
+        // Category Chips Row
         item {
             CategoryChipRow(
                 selectedCategory = selectedCategory,
@@ -177,7 +241,81 @@ fun ExploreScreen(
             )
         }
 
-        // If search is active, show flat list of matches
+        // Recommendations Section (Gorsa Kitaabaa)
+        if (searchQuery.isBlank() && recommendedBooks.isNotEmpty()) {
+            item {
+                Column(modifier = Modifier.padding(top = 10.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = Color(0xFFF59E0B),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Gorsa Kitaabaa (Recommendations)",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFFF59E0B).copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = "Siif Filatame",
+                                color = Color(0xFFB45309),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        items(recommendedBooks) { item ->
+                            Column(modifier = Modifier.width(150.dp)) {
+                                BookCoverCard(
+                                    book = item.book,
+                                    onClick = { onBookClick(item.book) },
+                                    isDownloading = downloadingBookId == item.book.id
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = item.reasonAfaanOromo,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(6.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Active Search or Filter Matches
         if (searchQuery.isNotBlank() || selectedCategory != "Hunda") {
             item {
                 Row(
@@ -191,6 +329,11 @@ fun ExploreScreen(
                         text = "Bu'aa Barbaachaa (${books.size})",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Tartiiba: ${sortOption.titleAfaanOromo}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -210,7 +353,7 @@ fun ExploreScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Jechoota biraatiin irra deebi'ii barbaadi.",
+                            text = "Mataduree, barreessaa, ykn gosaan irra deebi'ii barbaadi.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -239,9 +382,9 @@ fun ExploreScreen(
                 }
             }
         } else {
-            // Featured Horizontal Shelf
+            // Trending Books Shelf
             item {
-                Column(modifier = Modifier.padding(top = 10.dp)) {
+                Column(modifier = Modifier.padding(top = 14.dp)) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -256,7 +399,7 @@ fun ExploreScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Filatamoo Yeroo Ammaa",
+                            text = "Biyya Keessatti Jaalatamaa",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -326,7 +469,7 @@ fun ExploreScreen(
                 }
             }
 
-            // Premium / For Sale Books Section ("Kitaabota Gurgurtaa")
+            // Premium Books Section
             if (premiumBooks.isNotEmpty()) {
                 item {
                     Column(modifier = Modifier.padding(top = 18.dp)) {
@@ -368,11 +511,13 @@ fun ExploreScreen(
 
             // All Catalog Grid
             item {
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(18.dp))
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = "Kitaabota Hunda (${books.size})",

@@ -13,9 +13,11 @@ import kotlinx.coroutines.launch
     entities = [
         BookEntity::class,
         BookmarkEntity::class,
-        SaleTransactionEntity::class
+        SaleTransactionEntity::class,
+        ReviewEntity::class,
+        UserProfileEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -32,13 +34,17 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "mana_kitaabaa.db"
-                ).addCallback(object : Callback() {
+                ).fallbackToDestructiveMigration(true)
+                .addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
-                        // Pre-populate with initial books
+                        // Pre-populate with initial books, reviews, and profile
                         CoroutineScope(Dispatchers.IO).launch {
                             val database = getInstance(context)
-                            database.bookDao().insertBooks(InitialBookData.getSampleBooks())
+                            val dao = database.bookDao()
+                            dao.insertBooks(InitialBookData.getSampleBooks())
+                            dao.insertReviews(InitialBookData.getInitialReviews())
+                            dao.insertUserProfile(InitialBookData.getDefaultProfile())
                         }
                     }
                 }).build()

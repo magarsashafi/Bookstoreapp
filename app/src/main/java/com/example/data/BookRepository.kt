@@ -15,10 +15,25 @@ class BookRepository(private val bookDao: BookDao) {
     val allTransactions: Flow<List<SaleTransactionEntity>> = bookDao.getAllTransactions()
     val totalRevenue: Flow<Double?> = bookDao.getTotalSalesRevenue()
 
+    // Virtual Bookshelves
+    val wantToReadBooks: Flow<List<BookEntity>> = bookDao.getBooksByShelf(ShelfStatus.WANT_TO_READ.name)
+    val currentlyReadingBooks: Flow<List<BookEntity>> = bookDao.getBooksByShelf(ShelfStatus.CURRENTLY_READING.name)
+    val readBooks: Flow<List<BookEntity>> = bookDao.getBooksByShelf(ShelfStatus.READ.name)
+
+    // User Profile
+    val userProfile: Flow<UserProfileEntity?> = bookDao.getUserProfile()
+
     suspend fun ensureInitialData() = withContext(Dispatchers.IO) {
         val count = bookDao.getBooksCount()
         if (count == 0) {
             bookDao.insertBooks(InitialBookData.getSampleBooks())
+            bookDao.insertReviews(InitialBookData.getInitialReviews())
+            bookDao.insertUserProfile(InitialBookData.getDefaultProfile())
+        } else {
+            val profile = bookDao.getUserProfileSync()
+            if (profile == null) {
+                bookDao.insertUserProfile(InitialBookData.getDefaultProfile())
+            }
         }
     }
 
@@ -30,6 +45,10 @@ class BookRepository(private val bookDao: BookDao) {
 
     suspend fun toggleFavorite(bookId: String, currentFavorite: Boolean) = withContext(Dispatchers.IO) {
         bookDao.updateFavoriteStatus(bookId, !currentFavorite)
+    }
+
+    suspend fun updateShelfStatus(bookId: String, shelf: ShelfStatus) = withContext(Dispatchers.IO) {
+        bookDao.updateShelfStatus(bookId, shelf.name)
     }
 
     suspend fun downloadBook(bookId: String) = withContext(Dispatchers.IO) {
@@ -88,7 +107,9 @@ class BookRepository(private val bookDao: BookDao) {
             isUserListed = true,
             currentPage = 1,
             lastReadTimestamp = System.currentTimeMillis(),
-            content = content
+            content = content,
+            shelfStatus = ShelfStatus.READ.name,
+            userRating = 5
         )
         bookDao.insertBook(newBook)
         newBook
@@ -119,5 +140,71 @@ class BookRepository(private val bookDao: BookDao) {
 
     suspend fun deleteBookmark(bookmark: BookmarkEntity) = withContext(Dispatchers.IO) {
         bookDao.deleteBookmark(bookmark)
+    }
+
+    // Reviews & Ratings
+    fun getReviewsForBook(bookId: String): Flow<List<ReviewEntity>> = bookDao.getReviewsForBook(bookId)
+
+    suspend fun submitReview(
+        bookId: String,
+        userId: String,
+        userName: String,
+        rating: Int,
+        reviewText: String
+    ): ReviewEntity = withContext(Dispatchers.IO) {
+        val review = ReviewEntity(
+            id = "review_${UUID.randomUUID()}",
+            bookId = bookId,
+            userId = userId,
+            userName = userName,
+            rating = rating,
+            reviewText = reviewText,
+            timestamp = System.currentTimeMillis()
+        )
+        bookDao.insertReview(review)
+        bookDao.updateUserRating(bookId, rating)
+
+        // Recalculate average rating & reviews count
+        val count = bookDao.getReviewsCountForBook(bookId)
+        val avg = bookDao.getAverageRatingForBook(bookId) ?: rating.toDouble()
+        val roundedAvg = (Math.round(avg * 10.0) / 10.0).toFloat()
+        bookDao.updateBookRatingStats(bookId, roundedAvg, count)
+
+        // Ensure book is on the Read shelf
+        bookDao.updateShelfStatus(bookId, ShelfStatus.READ.name)
+
+        review
+    }
+
+    // User Profile
+    suspend fun updateUserProfile(profile: UserProfileEntity) = withContext(Dispatchers.IO) {
+        bookDao.updateUserProfile(profile)
+    }
+
+    suspend fun registerOrLoginUser(
+        username: String,
+        fullName: String,
+        email: String,
+        avatarColor: String = "#8C2D19",
+        favGenre: String = "Asoosama"
+    ): UserProfileEntity = withContext(Dispatchers.IO) {
+        val existing = bookDao.getUserProfileSync()
+        val profile = (existing ?: InitialBookData.getDefaultProfile()).copy(
+            username = username,
+            fullName = fullName.ifBlank { username },
+            email = email,
+            avatarColorHex = avatarColor,
+            favoriteGenre = favGenre,
+            isLoggedIn = true
+        )
+        bookDao.insertUserProfile(profile)
+        profile
+    }
+
+    suspend fun logoutUser() = withContext(Dispatchers.IO) {
+        val existing = bookDao.getUserProfileSync()
+        if (existing != null) {
+            bookDao.updateUserProfile(existing.copy(isLoggedIn = false))
+        }
     }
 }

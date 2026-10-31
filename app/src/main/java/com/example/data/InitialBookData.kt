@@ -16,10 +16,11 @@ object InitialBookData {
             isDownloaded = true,
             fileSizeMb = 4.8,
             isPurchased = true,
-            isFavorite = true,
             isUserListed = false,
             currentPage = 3,
             lastReadTimestamp = System.currentTimeMillis() - 3600000,
+            shelfStatus = ShelfStatus.CURRENTLY_READING.name,
+            userRating = 0,
             content = """
 # Boqonnaa 1: Ganama Barii fi Abjuu Haaraa
 
@@ -88,6 +89,8 @@ Hawwiin ganda dhaloota isheetti deebitee kilinika jalqabaa banuudhaan haadholii 
             isUserListed = false,
             currentPage = 1,
             lastReadTimestamp = 0L,
+            shelfStatus = ShelfStatus.WANT_TO_READ.name,
+            userRating = 0,
             content = """
 # Boqonnaa 1: Hundee fi Seenaa Saba Oromoo
 
@@ -140,6 +143,8 @@ Haqni Oromoo keessatti lafarratti hin dhiitamu. Dhugaan Waaqaa fi lafaa wal qaba
             isUserListed = false,
             currentPage = 1,
             lastReadTimestamp = 0L,
+            shelfStatus = ShelfStatus.READ.name,
+            userRating = 5,
             content = """
 # Boqonnaa 1: Eenyummaa fi Qubee Afaan Oromoo
 
@@ -172,6 +177,8 @@ Aadaan Oromoo aadaa afaaniin (oral tradition) dhalootaa dhalootatti darbaa ture 
             isUserListed = false,
             currentPage = 1,
             lastReadTimestamp = System.currentTimeMillis() - 86400000,
+            shelfStatus = ShelfStatus.READ.name,
+            userRating = 4,
             content = """
 # Kutaa 1: Miira Onnee fi Jaalala Biyyaa
 
@@ -211,6 +218,8 @@ Haqni kee birmaduu haa tahu yeroo hunda.
             isUserListed = false,
             currentPage = 1,
             lastReadTimestamp = 0L,
+            shelfStatus = ShelfStatus.WANT_TO_READ.name,
+            userRating = 0,
             content = """
 # Boqonnaa 1: Hubannoo Qarshii fi Qusannaa
 
@@ -249,12 +258,12 @@ Karoorri daldalaa qabxiiwwan afur qabaachuu qaba:
             isUserListed = false,
             currentPage = 1,
             lastReadTimestamp = 0L,
+            shelfStatus = ShelfStatus.NONE.name,
+            userRating = 0,
             content = """
 # Boqonnaa 1: Madda Haroo fi Ardaa Jilaa
-
-Ardaan Liiban fi Haroon Daawwee yeroo bonaa dheebuu loonii baasuuf iddoo qulqulluudha. Jaarsoliin Gadaa yaa'anii eebba godhu. 
-
-Dargaggoon Liiban jedhamu gaachana qabatee loon tiksaa ture. Guyyaa tokko intala uffata aadaa faayamte argee onneen isaa rukutuu jalqabde...
+            Ardaan Liiban fi Haroon Daawwee yeroo bonaa dheebuu loonii baasuuf iddoo qulqulluudha. Jaarsoliin Gadaa yaa'anii eebba godhu. 
+            Dargaggoon Liiban jedhamu gaachana qabatee loon tiksaa ture. Guyyaa tokko intala uffata aadaa faayamte argee onneen isaa rukutuu jalqabde...
             """.trimIndent()
         ),
         BookEntity(
@@ -275,6 +284,8 @@ Dargaggoon Liiban jedhamu gaachana qabatee loon tiksaa ture. Guyyaa tokko intala
             isUserListed = false,
             currentPage = 1,
             lastReadTimestamp = 0L,
+            shelfStatus = ShelfStatus.READ.name,
+            userRating = 5,
             content = """
 # Boqonnaa 1: Sagaleewwan fi Dubbachiiftuulee
 
@@ -283,6 +294,74 @@ Kanneen dheeratan immoo qubee dachaa ta'u: aa, ee, ii, oo, uu.
 
 Sagaleeleen dachaas akka ch, dh, ny, ph, sh, ts jiru. Kanneen sirnaan fayyadamuun hiika jechootaa jijjiira. Fakkeenyaaf: 'Lafa' (earth) fi 'Laafaa' (soft).
             """.trimIndent()
+        )
+    )
+
+    fun getDefaultProfile(): UserProfileEntity = UserProfileEntity(
+        id = "user_default_1",
+        username = "megersa_shafi",
+        fullName = "Megersa Shafi",
+        email = "megersashafi@gmail.com",
+        bio = "Jaallataa fi dubbisaa kitaabota Afaan Oromoo. Aadaa fi seenaa Oromoof dhimma olaanaa qaba.",
+        avatarColorHex = "#8C2D19",
+        favoriteGenre = "Asoosama",
+        isLoggedIn = true
+    )
+
+    fun getInitialReviews(): List<ReviewEntity> = listOf(
+        ReviewEntity(
+            id = "rev_1",
+            bookId = "book_1",
+            userId = "user_rev_1",
+            userName = "Tolasaa Guddisaa",
+            rating = 5,
+            reviewText = "Asoosama baay'ee namatti tolu! Seenaan Hawwii dargaggootaaf fakkeenya guddaadha. Obsi fi ciminni ishee nama boonsa.",
+            timestamp = System.currentTimeMillis() - 86400000 * 2
+        ),
+        ReviewEntity(
+            id = "rev_2",
+            bookId = "book_1",
+            userId = "user_rev_2",
+            userName = "Bontuu Dhaabaa",
+            rating = 5,
+            reviewText = "Jaalala dhugaa fi aadaa Oromoo akkaan ibsa. Tokkoon tokkoon boqonnaa isaa onnee namaa tuqa.",
+            timestamp = System.currentTimeMillis() - 86400000 * 5
+        ),
+        ReviewEntity(
+            id = "rev_3",
+            bookId = "book_2",
+            userId = "user_rev_3",
+            userName = "Kabbadaa Roobaa",
+            rating = 5,
+            reviewText = "Kitaaba hundee seenaa Oromoo fi Sirna Gadaa beekuuf hundi dubbisuu qabuudha. Baay'ee na barsiise.",
+            timestamp = System.currentTimeMillis() - 86400000 * 3
+        ),
+        ReviewEntity(
+            id = "rev_4",
+            bookId = "book_2",
+            userId = "user_rev_4",
+            userName = "Ibsaa Fayyisaa",
+            rating = 5,
+            reviewText = "Maddi beekumsa Gadaa isa guddaadha. Qabiyyee fi heera dimokiraasii Oromoo ifa godhee dhiheessa.",
+            timestamp = System.currentTimeMillis() - 86400000 * 7
+        ),
+        ReviewEntity(
+            id = "rev_5",
+            bookId = "book_3",
+            userId = "user_default_1",
+            userName = "Megersa Shafi",
+            rating = 5,
+            reviewText = "Dr. Haile Fida qorannoo guddaa gochuun qubee fi seenaa keenyaaf bu'uura kaa'an. Dubbisee xumureera, hedduu namatti tola!",
+            timestamp = System.currentTimeMillis() - 86400000
+        ),
+        ReviewEntity(
+            id = "rev_6",
+            bookId = "book_4",
+            userId = "user_default_1",
+            userName = "Megersa Shafi",
+            rating = 4,
+            reviewText = "Walaloo mi'aawaa fi garaa namaa kakaasu. Keessattuu faaruun Finfinnee fi malkaawwan Oromiyaa bareedaadha.",
+            timestamp = System.currentTimeMillis() - 86400000 * 4
         )
     )
 }

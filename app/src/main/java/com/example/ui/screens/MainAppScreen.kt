@@ -8,7 +8,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -16,10 +15,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.LocalLibrary
 import androidx.compose.material.icons.filled.MonetizationOn
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.LocalLibrary
 import androidx.compose.material.icons.outlined.MonetizationOn
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Store
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -27,7 +28,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,8 +41,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.BookEntity
+import com.example.data.ShelfStatus
 import com.example.ui.components.BookDetailSheet
 import com.example.ui.components.BuyCheckoutDialog
+import com.example.ui.components.ReviewSubmissionDialog
 import com.example.ui.viewmodel.AppTab
 import com.example.ui.viewmodel.BookViewModel
 
@@ -56,16 +58,25 @@ fun MainAppScreen(
     val currentTab by viewModel.currentTab.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val selectedCategory by viewModel.selectedCategory.collectAsStateWithLifecycle()
+    val sortOption by viewModel.sortOption.collectAsStateWithLifecycle()
 
     val filteredBooks by viewModel.filteredExploreBooks.collectAsStateWithLifecycle()
+    val recommendedBooks by viewModel.recommendedBooks.collectAsStateWithLifecycle()
     val libraryBooks by viewModel.libraryBooks.collectAsStateWithLifecycle()
     val downloadedBooks by viewModel.downloadedBooks.collectAsStateWithLifecycle()
     val userListedBooks by viewModel.userListedBooks.collectAsStateWithLifecycle()
+
+    val wantToReadBooks by viewModel.wantToReadBooks.collectAsStateWithLifecycle()
+    val currentlyReadingBooks by viewModel.currentlyReadingBooks.collectAsStateWithLifecycle()
+    val readBooks by viewModel.readBooks.collectAsStateWithLifecycle()
+
+    val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
     val transactions by viewModel.transactions.collectAsStateWithLifecycle()
     val totalRevenue by viewModel.totalRevenue.collectAsStateWithLifecycle()
 
     val downloadingBookId by viewModel.downloadingBookId.collectAsStateWithLifecycle()
     val selectedBookForDetail by viewModel.selectedBookForDetail.collectAsStateWithLifecycle()
+    val reviewsForSelectedBook by viewModel.reviewsForSelectedBook.collectAsStateWithLifecycle()
     val activeReadingBook by viewModel.activeReadingBook.collectAsStateWithLifecycle()
 
     val readerTheme by viewModel.readerTheme.collectAsStateWithLifecycle()
@@ -80,6 +91,8 @@ fun MainAppScreen(
     val isPublishing by viewModel.isPublishing.collectAsStateWithLifecycle()
 
     var showSellDialog by remember { mutableStateOf(false) }
+    var bookForReview by remember { mutableStateOf<BookEntity?>(null) }
+    var librarySelectedShelfFilter by remember { mutableStateOf<String?>(null) }
 
     // If active reading book is open, display full reader screen
     if (activeReadingBook != null) {
@@ -132,7 +145,10 @@ fun MainAppScreen(
                     // Library Tab with Badge
                     NavigationBarItem(
                         selected = currentTab == AppTab.LIBRARY,
-                        onClick = { viewModel.setTab(AppTab.LIBRARY) },
+                        onClick = {
+                            librarySelectedShelfFilter = null
+                            viewModel.setTab(AppTab.LIBRARY)
+                        },
                         icon = {
                             BadgedBox(
                                 badge = {
@@ -164,6 +180,20 @@ fun MainAppScreen(
                         label = { Text("Gurgurii") },
                         modifier = Modifier.testTag("nav_tab_seller")
                     )
+
+                    // Profile Tab
+                    NavigationBarItem(
+                        selected = currentTab == AppTab.PROFILE,
+                        onClick = { viewModel.setTab(AppTab.PROFILE) },
+                        icon = {
+                            Icon(
+                                imageVector = if (currentTab == AppTab.PROFILE) Icons.Filled.Person else Icons.Outlined.Person,
+                                contentDescription = "Eenyummaa"
+                            )
+                        },
+                        label = { Text("Eenyummaa") },
+                        modifier = Modifier.testTag("nav_tab_profile")
+                    )
                 }
             }
         ) { paddingValues ->
@@ -176,20 +206,34 @@ fun MainAppScreen(
                     AppTab.EXPLORE -> {
                         ExploreScreen(
                             books = filteredBooks,
+                            recommendedBooks = recommendedBooks,
                             searchQuery = searchQuery,
                             selectedCategory = selectedCategory,
+                            sortOption = sortOption,
                             downloadingBookId = downloadingBookId,
                             onSearchChange = { viewModel.updateSearchQuery(it) },
                             onCategorySelected = { viewModel.selectCategory(it) },
+                            onSortOptionChanged = { viewModel.updateSortOption(it) },
                             onBookClick = { viewModel.openBookDetail(it) }
                         )
                     }
                     AppTab.LIBRARY -> {
                         LibraryScreen(
                             libraryBooks = libraryBooks,
+                            wantToReadBooks = wantToReadBooks,
+                            currentlyReadingBooks = currentlyReadingBooks,
+                            readBooks = readBooks,
                             downloadedBooks = downloadedBooks,
+                            initialShelfFilter = librarySelectedShelfFilter,
                             onBookClick = { viewModel.openBookDetail(it) },
                             onContinueReading = { viewModel.openReader(it) },
+                            onShelfChanged = { book, shelf ->
+                                viewModel.updateShelfStatus(book.id, shelf)
+                                Toast.makeText(context, "Kuusaan jijjiirameera: ${shelf.titleAfaanOromo}", Toast.LENGTH_SHORT).show()
+                            },
+                            onRateAndReview = { book ->
+                                bookForReview = book
+                            },
                             onRemoveDownload = { viewModel.removeDownload(it) }
                         )
                     }
@@ -206,6 +250,30 @@ fun MainAppScreen(
                             }
                         )
                     }
+                    AppTab.PROFILE -> {
+                        ProfileScreen(
+                            userProfile = userProfile,
+                            wantToReadCount = wantToReadBooks.size,
+                            currentlyReadingCount = currentlyReadingBooks.size,
+                            readCount = readBooks.size,
+                            onNavigateToShelf = { shelf ->
+                                librarySelectedShelfFilter = shelf
+                                viewModel.setTab(AppTab.LIBRARY)
+                            },
+                            onRegisterOrLogin = { username, fullName, email, avatarColor, favGenre ->
+                                viewModel.registerOrLogin(username, fullName, email, avatarColor, favGenre)
+                                Toast.makeText(context, "Baga nagaan dhuftan, @$username!", Toast.LENGTH_SHORT).show()
+                            },
+                            onUpdateProfile = { fullName, bio, favGenre, avatarColor ->
+                                viewModel.updateProfile(fullName, bio, favGenre, avatarColor)
+                                Toast.makeText(context, "Eenyummaan keessan haaromfameera!", Toast.LENGTH_SHORT).show()
+                            },
+                            onLogout = {
+                                viewModel.logout()
+                                Toast.makeText(context, "Baataniittu", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -215,6 +283,7 @@ fun MainAppScreen(
     selectedBookForDetail?.let { book ->
         BookDetailSheet(
             book = book,
+            reviews = reviewsForSelectedBook,
             isDownloading = downloadingBookId == book.id,
             onDismiss = { viewModel.closeBookDetail() },
             onRead = {
@@ -235,6 +304,28 @@ fun MainAppScreen(
             },
             onToggleFavorite = {
                 viewModel.toggleFavorite(book)
+            },
+            onShelfChanged = { shelf ->
+                viewModel.updateShelfStatus(book.id, shelf)
+                Toast.makeText(context, "Kuusaa '${shelf.titleAfaanOromo}' tti jijjiirame", Toast.LENGTH_SHORT).show()
+            },
+            onOpenReviewDialog = {
+                bookForReview = book
+            }
+        )
+    }
+
+    // Review Submission Dialog
+    bookForReview?.let { book ->
+        ReviewSubmissionDialog(
+            book = book,
+            initialRating = if (book.userRating > 0) book.userRating else 5,
+            onDismiss = { bookForReview = null },
+            onSubmitReview = { rating, reviewText ->
+                viewModel.submitReview(book, rating, reviewText) {
+                    bookForReview = null
+                    Toast.makeText(context, "Yaanni keessan galmeeffameera! Galatoomaa.", Toast.LENGTH_LONG).show()
+                }
             }
         )
     }

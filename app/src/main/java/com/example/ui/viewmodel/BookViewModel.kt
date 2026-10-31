@@ -8,13 +8,20 @@ import com.example.data.AppDatabase
 import com.example.data.BookEntity
 import com.example.data.BookmarkEntity
 import com.example.data.BookRepository
+import com.example.data.InitialBookData
+import com.example.data.ReviewEntity
 import com.example.data.SaleTransactionEntity
+import com.example.data.ShelfStatus
+import com.example.data.UserProfileEntity
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -22,8 +29,22 @@ import java.util.Locale
 enum class AppTab(val title: String, val afaanOromo: String) {
     EXPLORE("Store", "Gabaa"),
     LIBRARY("Library", "Kuusaa"),
-    SELLER("Sell & Earn", "Gurgurii")
+    SELLER("Sell & Earn", "Gurgurii"),
+    PROFILE("Profile", "Eenyummaa")
 }
+
+enum class SearchSortOption(val titleAfaanOromo: String, val titleEnglish: String) {
+    POPULAR("Beekamummaa", "Popular"),
+    RATING("Sadarkaa (Rating)", "Highest Rated"),
+    NEWEST("Haaraa", "Newest"),
+    PRICE_LOW("Gatii (Gadi Aanaa)", "Price: Low to High")
+}
+
+data class RecommendedBook(
+    val book: BookEntity,
+    val reasonAfaanOromo: String,
+    val reasonEnglish: String
+)
 
 enum class ReaderTheme(val displayName: String) {
     LIGHT("Ifaa"),
@@ -58,7 +79,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application), T
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
-            val result = textToSpeech?.setLanguage(Locale.US)
+            textToSpeech?.setLanguage(Locale.US)
             _isTtsReady.value = true
         }
     }
@@ -71,12 +92,45 @@ class BookViewModel(application: Application) : AndroidViewModel(application), T
         _currentTab.value = tab
     }
 
-    // Search & Filter
+    // User Profile
+    val userProfile: StateFlow<UserProfileEntity?> = repository.userProfile
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    fun registerOrLogin(username: String, fullName: String, email: String, avatarColor: String, favGenre: String) {
+        viewModelScope.launch {
+            repository.registerOrLoginUser(username, fullName, email, avatarColor, favGenre)
+        }
+    }
+
+    fun updateProfile(fullName: String, bio: String, favGenre: String, avatarColor: String) {
+        viewModelScope.launch {
+            val current = userProfile.value ?: return@launch
+            repository.updateUserProfile(
+                current.copy(
+                    fullName = fullName,
+                    bio = bio,
+                    favoriteGenre = favGenre,
+                    avatarColorHex = avatarColor
+                )
+            )
+        }
+    }
+
+    fun logout() {
+        viewModelScope.launch {
+            repository.logoutUser()
+        }
+    }
+
+    // Search & Filter & Sort
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
     private val _selectedCategory = MutableStateFlow("Hunda") // "All"
     val selectedCategory: StateFlow<String> = _selectedCategory.asStateFlow()
+
+    private val _sortOption = MutableStateFlow(SearchSortOption.POPULAR)
+    val sortOption: StateFlow<SearchSortOption> = _sortOption.asStateFlow()
 
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query
@@ -84,6 +138,10 @@ class BookViewModel(application: Application) : AndroidViewModel(application), T
 
     fun selectCategory(category: String) {
         _selectedCategory.value = category
+    }
+
+    fun updateSortOption(option: SearchSortOption) {
+        _sortOption.value = option
     }
 
     // Books Streams
@@ -99,25 +157,106 @@ class BookViewModel(application: Application) : AndroidViewModel(application), T
     val userListedBooks: StateFlow<List<BookEntity>> = repository.userListedBooks
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Virtual Bookshelves
+    val wantToReadBooks: StateFlow<List<BookEntity>> = repository.wantToReadBooks
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val currentlyReadingBooks: StateFlow<List<BookEntity>> = repository.currentlyReadingBooks
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val readBooks: StateFlow<List<BookEntity>> = repository.readBooks
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun updateShelfStatus(bookId: String, shelf: ShelfStatus) {
+        viewModelScope.launch {
+            repository.updateShelfStatus(bookId, shelf)
+            if (_selectedBookForDetail.value?.id == bookId) {
+                _selectedBookForDetail.value = _selectedBookForDetail.value?.copy(shelfStatus = shelf.name)
+            }
+        }
+    }
+
     val transactions: StateFlow<List<SaleTransactionEntity>> = repository.allTransactions
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val totalRevenue: StateFlow<Double?> = repository.totalRevenue
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
-    // Filtered books for Store / Explore screen
+    // Filtered and Sorted books for Store / Explore screen
     val filteredExploreBooks: StateFlow<List<BookEntity>> = combine(
         allBooks,
         searchQuery,
-        selectedCategory
-    ) { books, query, category ->
-        books.filter { book ->
+        selectedCategory,
+        sortOption
+    ) { books, query, category, sort ->
+        val filtered = books.filter { book ->
             val matchesQuery = query.isBlank() ||
                     book.title.contains(query, ignoreCase = true) ||
                     book.author.contains(query, ignoreCase = true) ||
+                    book.category.contains(query, ignoreCase = true) ||
                     book.description.contains(query, ignoreCase = true)
             val matchesCategory = category == "Hunda" || book.category.equals(category, ignoreCase = true)
             matchesQuery && matchesCategory
+        }
+
+        when (sort) {
+            SearchSortOption.POPULAR -> filtered.sortedByDescending { it.reviewsCount }
+            SearchSortOption.RATING -> filtered.sortedByDescending { it.rating }
+            SearchSortOption.NEWEST -> filtered.reversed()
+            SearchSortOption.PRICE_LOW -> filtered.sortedBy { it.priceEtb }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Recommendations Engine based on user reading history and popular trends
+    val recommendedBooks: StateFlow<List<RecommendedBook>> = combine(
+        allBooks,
+        readBooks,
+        currentlyReadingBooks,
+        userProfile
+    ) { all, read, current, profile ->
+        if (all.isEmpty()) return@combine emptyList()
+
+        val readIds = (read + current).map { it.id }.toSet()
+        val readGenres = (read + current).map { it.category }.distinct()
+        val favGenre = profile?.favoriteGenre ?: "Asoosama"
+
+        val recommendations = mutableListOf<RecommendedBook>()
+
+        // 1. Recommend unread books matching genres the user has read or loves
+        all.filter { !readIds.contains(it.id) && (readGenres.contains(it.category) || it.category == favGenre) }
+            .take(3)
+            .forEach { book ->
+                recommendations.add(
+                    RecommendedBook(
+                        book = book,
+                        reasonAfaanOromo = "Gosa '${book.category}' jaallattuuf gorfame",
+                        reasonEnglish = "Because you enjoy ${book.category}"
+                    )
+                )
+            }
+
+        // 2. Recommend trending / highest rated books
+        all.sortedByDescending { it.rating * it.reviewsCount }
+            .filter { b -> !readIds.contains(b.id) && recommendations.none { it.book.id == b.id } }
+            .take(3)
+            .forEach { book ->
+                recommendations.add(
+                    RecommendedBook(
+                        book = book,
+                        reasonAfaanOromo = "Biyya Keessatti Jaalatamaa (${book.rating} ★)",
+                        reasonEnglish = "Top Rated & Trending (${book.rating} ★)"
+                    )
+                )
+            }
+
+        recommendations.ifEmpty {
+            all.take(4).map {
+                RecommendedBook(
+                    book = it,
+                    reasonAfaanOromo = "Filatamaa Mana Kitaabaa",
+                    reasonEnglish = "Staff Pick"
+                )
+            }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -125,12 +264,50 @@ class BookViewModel(application: Application) : AndroidViewModel(application), T
     private val _selectedBookForDetail = MutableStateFlow<BookEntity?>(null)
     val selectedBookForDetail: StateFlow<BookEntity?> = _selectedBookForDetail.asStateFlow()
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val reviewsForSelectedBook: StateFlow<List<ReviewEntity>> = _selectedBookForDetail
+        .flatMapLatest { book ->
+            if (book != null) {
+                repository.getReviewsForBook(book.id)
+            } else {
+                flowOf(emptyList())
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     fun openBookDetail(book: BookEntity) {
         _selectedBookForDetail.value = book
     }
 
     fun closeBookDetail() {
         _selectedBookForDetail.value = null
+    }
+
+    // Submit Review and Rating
+    fun submitReview(book: BookEntity, rating: Int, reviewText: String, onComplete: () -> Unit) {
+        viewModelScope.launch {
+            val user = userProfile.value ?: InitialBookData.getDefaultProfile()
+            val newReview = repository.submitReview(
+                bookId = book.id,
+                userId = user.id,
+                userName = user.fullName.ifBlank { user.username },
+                rating = rating,
+                reviewText = reviewText
+            )
+            // Refresh active book detail
+            val current = _selectedBookForDetail.value
+            if (current != null && current.id == book.id) {
+                val newCount = current.reviewsCount + 1
+                val newAvg = ((current.rating * current.reviewsCount + rating) / newCount)
+                val roundedAvg = (Math.round(newAvg * 10.0) / 10.0).toFloat()
+                _selectedBookForDetail.value = current.copy(
+                    rating = roundedAvg,
+                    reviewsCount = newCount,
+                    userRating = rating,
+                    shelfStatus = ShelfStatus.READ.name
+                )
+            }
+            onComplete()
+        }
     }
 
     // Active Reader State
@@ -155,6 +332,10 @@ class BookViewModel(application: Application) : AndroidViewModel(application), T
         _activeChapterIndex.value = 0
         viewModelScope.launch {
             repository.updateReadingProgress(book.id, book.currentPage)
+            // Also ensure it is marked on the Currently Reading shelf if not already on Read
+            if (book.shelfStatus != ShelfStatus.READ.name) {
+                repository.updateShelfStatus(book.id, ShelfStatus.CURRENTLY_READING)
+            }
         }
     }
 
@@ -220,10 +401,9 @@ class BookViewModel(application: Application) : AndroidViewModel(application), T
     fun downloadBook(bookId: String) {
         viewModelScope.launch {
             _downloadingBookId.value = bookId
-            delay(1200) // realistic download feedback
+            delay(1200)
             repository.downloadBook(bookId)
             _downloadingBookId.value = null
-            // update active detail if open
             if (_selectedBookForDetail.value?.id == bookId) {
                 _selectedBookForDetail.value = _selectedBookForDetail.value?.copy(isDownloaded = true)
             }
@@ -263,15 +443,18 @@ class BookViewModel(application: Application) : AndroidViewModel(application), T
         val book = _bookToBuy.value ?: return
         viewModelScope.launch {
             _isProcessingPurchase.value = true
-            delay(1500) // realistic gateway verification
+            delay(1500)
             val txn = repository.buyBook(book, buyerName, paymentMethod)
-            // automatically mark downloaded as well for convenience
             repository.downloadBook(book.id)
+            repository.updateShelfStatus(book.id, ShelfStatus.WANT_TO_READ)
             _isProcessingPurchase.value = false
             _purchaseSuccessTransaction.value = txn
-            // refresh selected book detail
             if (_selectedBookForDetail.value?.id == book.id) {
-                _selectedBookForDetail.value = _selectedBookForDetail.value?.copy(isPurchased = true, isDownloaded = true)
+                _selectedBookForDetail.value = _selectedBookForDetail.value?.copy(
+                    isPurchased = true,
+                    isDownloaded = true,
+                    shelfStatus = ShelfStatus.WANT_TO_READ.name
+                )
             }
         }
     }
@@ -324,18 +507,6 @@ class BookViewModel(application: Application) : AndroidViewModel(application), T
                 _selectedBookForDetail.value = null
             }
         }
-    }
-
-    // Bookmarks for current book in reader
-    val currentBookBookmarks: StateFlow<List<BookmarkEntity>> = combine(
-        _activeReadingBook,
-        repository.allBooks
-    ) { activeBook, _ ->
-        activeBook?.id
-    }.combine(_activeReadingBook) { _, activeBook ->
-        activeBook?.id
-    }.let {
-        MutableStateFlow(emptyList()) // loaded on demand
     }
 
     fun addBookmark(noteText: String, quoteText: String) {

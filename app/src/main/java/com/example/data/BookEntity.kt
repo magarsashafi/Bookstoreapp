@@ -3,6 +3,13 @@ package com.example.data
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
+enum class ShelfStatus(val titleAfaanOromo: String, val titleEnglish: String) {
+    NONE("Filadhu", "None"),
+    WANT_TO_READ("Dubbisuuf Hawwa", "Want to Read"),
+    CURRENTLY_READING("Amma Dubbisaa Jira", "Currently Reading"),
+    READ("Dubbisee Xumure", "Read")
+}
+
 @Entity(tableName = "books")
 data class BookEntity(
     @PrimaryKey
@@ -23,5 +30,7 @@ data class BookEntity(
     val isUserListed: Boolean = false, // Created by user to sell
     val currentPage: Int = 1,
     val lastReadTimestamp: Long = 0L,
-    val content: String // Chapters and body text
+    val content: String, // Chapters and body text
+    val shelfStatus: String = ShelfStatus.NONE.name,
+    val userRating: Int = 0 // 0 means unrated by current user, 1..5
 )

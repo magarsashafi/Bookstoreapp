@@ -1,8 +1,8 @@
 package com.example
 
 import com.example.data.InitialBookData
+import com.example.data.ShelfStatus
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -20,11 +20,30 @@ class ExampleUnitTest {
         assertEquals("Asoosama", hawwii?.category)
         assertEquals(0.0, hawwii?.priceEtb ?: -1.0, 0.001)
         assertTrue("Hawwii content should contain chapters", hawwii?.content?.contains("Boqonnaa") == true)
+        assertEquals(ShelfStatus.CURRENTLY_READING.name, hawwii?.shelfStatus)
 
         // Check Gadaa Melbaa book
         val gadaa = books.find { it.title.contains("Gadaa") }
         assertNotNull("Gadaa Melbaa book should exist", gadaa)
         assertTrue("Gadaa Melbaa should be premium", (gadaa?.priceEtb ?: 0.0) > 0)
+        assertEquals(ShelfStatus.WANT_TO_READ.name, gadaa?.shelfStatus)
+    }
+
+    @Test
+    fun sampleReviews_arePopulatedCorrectly() {
+        val reviews = InitialBookData.getInitialReviews()
+        assertTrue("Reviews list should not be empty", reviews.isNotEmpty())
+        assertTrue("All ratings should be between 1 and 5", reviews.all { it.rating in 1..5 })
+        assertTrue("Should have reviews with text", reviews.all { it.reviewText.isNotBlank() })
+    }
+
+    @Test
+    fun defaultProfile_isValid() {
+        val profile = InitialBookData.getDefaultProfile()
+        assertNotNull(profile)
+        assertEquals("megersa_shafi", profile.username)
+        assertTrue(profile.email.contains("@"))
+        assertTrue(profile.isLoggedIn)
     }
 
     @Test

@@ -12,37 +12,45 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoStories
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -51,18 +59,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.BookEntity
+import com.example.data.ReviewEntity
+import com.example.data.ShelfStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BookDetailSheet(
     book: BookEntity,
+    reviews: List<ReviewEntity>,
     isDownloading: Boolean,
     onDismiss: () -> Unit,
     onRead: () -> Unit,
     onBuy: () -> Unit,
     onDownload: () -> Unit,
     onRemoveDownload: () -> Unit,
-    onToggleFavorite: () -> Unit
+    onToggleFavorite: () -> Unit,
+    onShelfChanged: (ShelfStatus) -> Unit,
+    onOpenReviewDialog: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -75,6 +88,15 @@ fun BookDetailSheet(
     }
 
     val canReadDirectly = book.isPurchased || book.priceEtb == 0.0 || book.isUserListed
+    var shelfDropdownExpanded by remember { mutableStateOf(false) }
+
+    val currentShelf = remember(book.shelfStatus) {
+        try {
+            ShelfStatus.valueOf(book.shelfStatus)
+        } catch (e: Exception) {
+            ShelfStatus.NONE
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -86,7 +108,7 @@ fun BookDetailSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(bottom = 32.dp)
+                .padding(bottom = 36.dp)
         ) {
             // Header with Cover & Quick Info
             Box(
@@ -209,7 +231,64 @@ fun BookDetailSheet(
                 }
             }
 
-            // Metric Counters (Fuula, Guddina, Dubbisa)
+            // Virtual Bookshelf Selector Bar
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = "Kuusaa Dubbisaa (Virtual Bookshelf):",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val shelves = listOf(
+                        ShelfStatus.WANT_TO_READ,
+                        ShelfStatus.CURRENTLY_READING,
+                        ShelfStatus.READ
+                    )
+
+                    shelves.forEach { shelf ->
+                        val isSelected = currentShelf == shelf
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { onShelfChanged(if (isSelected) ShelfStatus.NONE else shelf) },
+                            label = {
+                                Text(
+                                    text = shelf.titleAfaanOromo,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
+                            leadingIcon = if (isSelected) {
+                                {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            } else null,
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("shelf_chip_${shelf.name}")
+                        )
+                    }
+                }
+            }
+
+            // Metric Counters (Fuula, Guddina, Buufatame)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -255,7 +334,7 @@ fun BookDetailSheet(
                 }
             }
 
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
 
             // Description / Synopsis
             Column(modifier = Modifier.padding(horizontal = 20.dp)) {
@@ -273,7 +352,7 @@ fun BookDetailSheet(
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             // Main Actions (Read, Buy, Download, Favorite)
             Column(
@@ -395,6 +474,16 @@ fun BookDetailSheet(
                     }
                 }
             }
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp))
+
+            // Reviews & Ratings Section
+            ReviewsSection(
+                book = book,
+                reviews = reviews,
+                onWriteReviewClick = onOpenReviewDialog,
+                modifier = Modifier.padding(horizontal = 20.dp)
+            )
         }
     }
 }

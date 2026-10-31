@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,19 +17,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FolderSpecial
+import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material.icons.filled.SdStorage
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -54,29 +58,46 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.BookEntity
+import com.example.data.ShelfStatus
 
 enum class LibrarySubFilter(val title: String) {
     ALL("Hunda"),
-    READING("Dubbisaa Jira"),
-    DOWNLOADED("Buufatame"),
-    FAVORITES("Jaalataman")
+    WANT_TO_READ("Dubbisuuf Hawwa"),
+    CURRENTLY_READING("Amma Dubbisaa Jira"),
+    READ("Dubbisee Xumure"),
+    DOWNLOADED("Buufatame")
 }
 
 @Composable
 fun LibraryScreen(
     libraryBooks: List<BookEntity>,
+    wantToReadBooks: List<BookEntity>,
+    currentlyReadingBooks: List<BookEntity>,
+    readBooks: List<BookEntity>,
     downloadedBooks: List<BookEntity>,
+    initialShelfFilter: String? = null,
     onBookClick: (BookEntity) -> Unit,
     onContinueReading: (BookEntity) -> Unit,
+    onShelfChanged: (BookEntity, ShelfStatus) -> Unit,
+    onRateAndReview: (BookEntity) -> Unit,
     onRemoveDownload: (String) -> Unit
 ) {
-    var selectedFilter by remember { mutableStateOf(LibrarySubFilter.ALL) }
+    var selectedFilter by remember(initialShelfFilter) {
+        val initial = when (initialShelfFilter) {
+            "WANT_TO_READ" -> LibrarySubFilter.WANT_TO_READ
+            "CURRENTLY_READING" -> LibrarySubFilter.CURRENTLY_READING
+            "READ" -> LibrarySubFilter.READ
+            else -> LibrarySubFilter.ALL
+        }
+        mutableStateOf(initial)
+    }
 
     val displayedBooks = when (selectedFilter) {
         LibrarySubFilter.ALL -> libraryBooks
-        LibrarySubFilter.READING -> libraryBooks.filter { it.currentPage > 1 }
+        LibrarySubFilter.WANT_TO_READ -> wantToReadBooks
+        LibrarySubFilter.CURRENTLY_READING -> currentlyReadingBooks
+        LibrarySubFilter.READ -> readBooks
         LibrarySubFilter.DOWNLOADED -> downloadedBooks
-        LibrarySubFilter.FAVORITES -> libraryBooks.filter { it.isFavorite }
     }
 
     val totalStorageMb = downloadedBooks.sumOf { it.fileSizeMb }
@@ -92,15 +113,15 @@ fun LibraryScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
             ) {
                 Text(
-                    text = "Kuusaa Kiyya",
+                    text = "Kuusaa Kiyya (My Library)",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Kitaabota kuufatte, buufatte, fi dubbisaa jirtu asitti argatta.",
+                    text = "Kuusaa dhuunfaa: Hawwa, Amma Dubbisaa Jira, fi Dubbisee Xumure.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -112,14 +133,14 @@ fun LibraryScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
                 shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(14.dp),
+                        .padding(12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -142,11 +163,11 @@ fun LibraryScreen(
                             Text(
                                 text = "Iddoo Buufataa: ${"%.1f".format(totalStorageMb)} MB",
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
+                                fontSize = 13.sp
                             )
                             Text(
                                 text = "Kitaabota ${downloadedBooks.size} offline dubbisuuf qophii",
-                                fontSize = 12.sp,
+                                fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -168,20 +189,29 @@ fun LibraryScreen(
             }
         }
 
-        // Sub-filter tabs
+        // Virtual Bookshelf Sub-filter Tabs
         item {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 LibrarySubFilter.values().forEach { filter ->
                     val isSelected = selectedFilter == filter
+                    val count = when (filter) {
+                        LibrarySubFilter.ALL -> libraryBooks.size
+                        LibrarySubFilter.WANT_TO_READ -> wantToReadBooks.size
+                        LibrarySubFilter.CURRENTLY_READING -> currentlyReadingBooks.size
+                        LibrarySubFilter.READ -> readBooks.size
+                        LibrarySubFilter.DOWNLOADED -> downloadedBooks.size
+                    }
+
                     FilterChip(
                         selected = isSelected,
                         onClick = { selectedFilter = filter },
-                        label = { Text(filter.title) },
+                        label = { Text("${filter.title} ($count)") },
                         shape = RoundedCornerShape(16.dp),
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.primary,
@@ -210,13 +240,13 @@ fun LibraryScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "Kitaabni qophaa'e hin jiru",
+                        text = "Kuusaa kana keessatti kitaabni hin jiru",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Gabaa keessaa kitaabota barbaaduudhaan gara kuusaa keetti dabaladhu.",
+                        text = "Kitaaba barbaaduun kuusaa '${selectedFilter.title}' tti dabalaa.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp)
@@ -233,6 +263,16 @@ fun LibraryScreen(
                     }
                 }
 
+                var shelfMenuExpanded by remember { mutableStateOf(false) }
+
+                val bookShelf = remember(book.shelfStatus) {
+                    try {
+                        ShelfStatus.valueOf(book.shelfStatus)
+                    } catch (e: Exception) {
+                        ShelfStatus.NONE
+                    }
+                }
+
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -243,124 +283,210 @@ fun LibraryScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Book Spine Thumbnail
-                        Surface(
-                            modifier = Modifier
-                                .width(60.dp)
-                                .height(85.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            color = coverColor,
-                            shadowElevation = 3.dp
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(
+                            // Book Thumbnail
+                            Surface(
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(6.dp),
-                                verticalArrangement = Arrangement.SpaceBetween
+                                    .width(62.dp)
+                                    .height(90.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                color = coverColor,
+                                shadowElevation = 3.dp
                             ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(6.dp),
+                                    verticalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = book.title,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                        fontFamily = FontFamily.Serif,
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = book.category,
+                                        fontSize = 7.sp,
+                                        color = Color.White.copy(alpha = 0.8f)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(14.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = book.title,
-                                    fontSize = 9.sp,
+                                    style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    fontFamily = FontFamily.Serif,
-                                    maxLines = 3,
+                                    maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = book.category,
-                                    fontSize = 7.sp,
-                                    color = Color.White.copy(alpha = 0.8f)
+                                    text = book.author,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                // Reading progress
+                                val progressFloat = (book.currentPage.toFloat() / book.pagesCount).coerceIn(0f, 1f)
+                                val progressPercent = (progressFloat * 100).toInt()
+
+                                LinearProgressIndicator(
+                                    progress = { progressFloat },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(5.dp)
+                                        .clip(RoundedCornerShape(3.dp)),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    trackColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                                )
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Fuula ${book.currentPage}/${book.pagesCount} ($progressPercent%)",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+
+                                    if (book.isDownloaded) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = Icons.Default.CheckCircle,
+                                                contentDescription = null,
+                                                tint = Color(0xFF16A34A),
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(2.dp))
+                                            Text(
+                                                text = "Buufatame",
+                                                fontSize = 10.sp,
+                                                color = Color(0xFF16A34A),
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            Button(
+                                onClick = { onContinueReading(book) },
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.testTag("continue_read_${book.id}")
+                            ) {
+                                Text(
+                                    text = if (book.currentPage > 1) "Itti Fufi" else "Dubbisi",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
                                 )
                             }
                         }
 
-                        Spacer(modifier = Modifier.width(14.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = book.title,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = book.author,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-
-                            Spacer(modifier = Modifier.height(6.dp))
-
-                            // Reading progress
-                            val progressFloat = (book.currentPage.toFloat() / book.pagesCount).coerceIn(0f, 1f)
-                            val progressPercent = (progressFloat * 100).toInt()
-
-                            LinearProgressIndicator(
-                                progress = { progressFloat },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(6.dp)
-                                    .clip(RoundedCornerShape(3.dp)),
-                                color = MaterialTheme.colorScheme.primary,
-                                trackColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                            )
-
-                            Spacer(modifier = Modifier.height(4.dp))
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Fuula ${book.currentPage} / ${book.pagesCount} ($progressPercent%)",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.outline
-                                )
-
-                                if (book.isDownloaded) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            imageVector = Icons.Default.CheckCircle,
-                                            contentDescription = null,
-                                            tint = Color(0xFF16A34A),
-                                            modifier = Modifier.size(13.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(2.dp))
+                        // Bottom Actions: Shelf Selector & Review CTA
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Shelf Switcher Chip
+                            Box {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { shelfMenuExpanded = true }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                         Text(
-                                            text = "Buufatameera",
-                                            fontSize = 10.sp,
-                                            color = Color(0xFF16A34A),
-                                            fontWeight = FontWeight.SemiBold
+                                            text = "Kuusaa: ${bookShelf.titleAfaanOromo}",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+
+                                DropdownMenu(
+                                    expanded = shelfMenuExpanded,
+                                    onDismissRequest = { shelfMenuExpanded = false }
+                                ) {
+                                    ShelfStatus.values().forEach { shelf ->
+                                        DropdownMenuItem(
+                                            text = { Text(shelf.titleAfaanOromo) },
+                                            onClick = {
+                                                onShelfChanged(book, shelf)
+                                                shelfMenuExpanded = false
+                                            }
                                         )
                                     }
                                 }
                             }
-                        }
 
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        // Action: Read Now
-                        Button(
-                            onClick = { onContinueReading(book) },
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.testTag("continue_read_${book.id}")
-                        ) {
-                            Text(
-                                text = if (book.currentPage > 1) "Itti Fufi" else "Dubbisi",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            // Review / Rating CTA
+                            if (book.shelfStatus == ShelfStatus.READ.name || book.userRating > 0) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { onRateAndReview(book) }
+                                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Star,
+                                        contentDescription = null,
+                                        tint = Color(0xFFF59E0B),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = if (book.userRating > 0) "${book.userRating} ★ (Yaada)" else "Sadarkaa Kenni",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (book.userRating > 0) Color(0xFFB45309) else MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            } else {
+                                OutlinedButton(
+                                    onClick = { onRateAndReview(book) },
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.RateReview,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Yaada Kenni", fontSize = 10.sp)
+                                }
+                            }
                         }
                     }
                 }
