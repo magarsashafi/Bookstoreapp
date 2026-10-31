@@ -17,9 +17,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Publish
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -32,6 +36,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -39,16 +44,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.util.PdfManager
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,6 +91,32 @@ Barreessi kun dhaloota haaraaf beekumsa fi muuxannoo dabarsuuf qophaa'e.
 # Boqonnaa 2: Qabsoo fi Milkaa'ina
 Namni abjuu qabu yeroo hunda ni carraaqaa, abdii hin kutatu."""
         )
+    }
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var isReadingPdf by remember { mutableStateOf(false) }
+
+    val pdfUploadLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let {
+            scope.launch {
+                isReadingPdf = true
+                try {
+                    val result = PdfManager.importPdfFromUri(context, it)
+                    title = result.title
+                    if (author.isBlank()) {
+                        author = "Barreessaa Dhuunfaa"
+                    }
+                    pagesText = "${result.pagesCount}"
+                    description = "Kitaaba PDF meeshaa irraa fe'ame. Guddina: ${result.fileSizeMb} MB."
+                    contentText = result.content
+                } finally {
+                    isReadingPdf = false
+                }
+            }
+        }
     }
 
     var categoryExpanded by remember { mutableStateOf(false) }
@@ -136,6 +171,38 @@ Namni abjuu qabu yeroo hunda ni carraaqaa, abdii hin kutatu."""
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
+
+                // Upload PDF directly button
+                OutlinedButton(
+                    onClick = { pdfUploadLauncher.launch("application/pdf") },
+                    enabled = !isReadingPdf && !isPublishing,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .testTag("upload_pdf_to_sell_button"),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    if (isReadingPdf) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("PDF Dubbisaa Jira...", fontSize = 12.sp)
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.PictureAsPdf,
+                            contentDescription = null,
+                            tint = Color(0xFFDC2626),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Faayilii PDF Fe'iitii Gurguri (Upload PDF)",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // Title Input
                 OutlinedTextField(

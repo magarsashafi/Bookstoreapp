@@ -1,6 +1,7 @@
 package com.example.ui.viewmodel
 
 import android.app.Application
+import android.content.Context
 import android.speech.tts.TextToSpeech
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -13,6 +14,8 @@ import com.example.data.ReviewEntity
 import com.example.data.SaleTransactionEntity
 import com.example.data.ShelfStatus
 import com.example.data.UserProfileEntity
+import com.example.util.ImportedPdfResult
+import com.example.util.PdfManager
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +27,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.io.File
 import java.util.Locale
 
 enum class AppTab(val title: String, val afaanOromo: String) {
@@ -74,7 +78,12 @@ class BookViewModel(application: Application) : AndroidViewModel(application), T
         viewModelScope.launch {
             repository.ensureInitialData()
         }
-        textToSpeech = TextToSpeech(application, this)
+        try {
+            textToSpeech = TextToSpeech(application, this)
+        } catch (e: Exception) {
+            android.util.Log.e("BookViewModel", "TTS initialization error", e)
+            textToSpeech = null
+        }
     }
 
     override fun onInit(status: Int) {
@@ -380,18 +389,27 @@ class BookViewModel(application: Application) : AndroidViewModel(application), T
     }
 
     private fun speakText(text: String) {
-        if (_isTtsReady.value) {
-            val cleanText = text.replace("#", "")
-                .replace("---", "")
-                .take(3000)
-            textToSpeech?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, "BOOK_SPEECH")
-            _isTtsPlaying.value = true
+        try {
+            if (_isTtsReady.value && textToSpeech != null) {
+                val cleanText = text.replace("#", "")
+                    .replace("---", "")
+                    .take(3000)
+                textToSpeech?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, "BOOK_SPEECH")
+                _isTtsPlaying.value = true
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("BookViewModel", "TTS speakText error", e)
         }
     }
 
     fun stopTts() {
-        textToSpeech?.stop()
-        _isTtsPlaying.value = false
+        try {
+            textToSpeech?.stop()
+        } catch (e: Exception) {
+            android.util.Log.e("BookViewModel", "TTS stop error", e)
+        } finally {
+            _isTtsPlaying.value = false
+        }
     }
 
     // Download Simulation & Execution
@@ -439,15 +457,35 @@ class BookViewModel(application: Application) : AndroidViewModel(application), T
         _isProcessingPurchase.value = false
     }
 
-    fun executePurchase(paymentMethod: String, buyerName: String) {
+    private val _verificationStatusMessage = MutableStateFlow("")
+    val verificationStatusMessage: StateFlow<String> = _verificationStatusMessage.asStateFlow()
+
+    fun executePurchase(
+        paymentMethod: String,
+        buyerName: String,
+        payerPhone: String = "0911223344",
+        transactionRef: String = ""
+    ) {
         val book = _bookToBuy.value ?: return
         viewModelScope.launch {
             _isProcessingPurchase.value = true
-            delay(1500)
-            val txn = repository.buyBook(book, buyerName, paymentMethod)
+            _verificationStatusMessage.value = "Sirna $paymentMethod wajjin wal qunnamsiisaa jira..."
+            delay(700)
+            _verificationStatusMessage.value = "Lakkoofsa mirkaneessaa '$transactionRef' qorachaa jira..."
+            delay(800)
+            _verificationStatusMessage.value = "Kaffaltiin qarshii ${book.priceEtb.toInt()} ETB mirkanaa'aa jira..."
+            delay(700)
+            val txn = repository.buyBook(
+                book = book,
+                buyerName = buyerName,
+                paymentMethod = paymentMethod,
+                payerPhone = payerPhone,
+                customRef = transactionRef
+            )
             repository.downloadBook(book.id)
             repository.updateShelfStatus(book.id, ShelfStatus.WANT_TO_READ)
             _isProcessingPurchase.value = false
+            _verificationStatusMessage.value = "Mirkanaa'eera!"
             _purchaseSuccessTransaction.value = txn
             if (_selectedBookForDetail.value?.id == book.id) {
                 _selectedBookForDetail.value = _selectedBookForDetail.value?.copy(
@@ -491,6 +529,55 @@ class BookViewModel(application: Application) : AndroidViewModel(application), T
         }
     }
 
+    // PDF Export and Import
+    private val _isGeneratingPdfBookId = MutableStateFlow<String?>(null)
+    val isGeneratingPdfBookId: StateFlow<String?> = _isGeneratingPdfBookId.asStateFlow()
+
+    private val _isImportingPdf = MutableStateFlow(false)
+    val isImportingPdf: StateFlow<Boolean> = _isImportingPdf.asStateFlow()
+
+    fun exportBookAsPdf(context: Context, book: BookEntity, onComplete: (File) -> Unit = {}) {
+        viewModelScope.launch {
+            _isGeneratingPdfBookId.value = book.id
+            try {
+                val file = PdfManager.generateBookPdf(context, book)
+                PdfManager.openOrSharePdf(context, file, book.title)
+                onComplete(file)
+            } finally {
+                _isGeneratingPdfBookId.value = null
+            }
+        }
+    }
+
+    fun importPdfBook(
+        result: ImportedPdfResult,
+        isForSale: Boolean = false,
+        priceEtb: Double = 0.0,
+        category: String = "Asoosama",
+        onSuccess: (BookEntity) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            _isImportingPdf.value = true
+            try {
+                val newBook = repository.publishBookForSale(
+                    title = result.title,
+                    author = result.author,
+                    category = category,
+                    description = "Kitaaba PDF meeshaa keessan irraa fe'ame. Guddina: ${result.fileSizeMb} MB, Fuulota: ${result.pagesCount}.",
+                    priceEtb = priceEtb,
+                    pages = result.pagesCount,
+                    colorHex = "#1E3A8A",
+                    content = result.content
+                )
+                repository.downloadBook(newBook.id)
+                repository.updateShelfStatus(newBook.id, ShelfStatus.WANT_TO_READ)
+                onSuccess(newBook)
+            } finally {
+                _isImportingPdf.value = false
+            }
+        }
+    }
+
     fun toggleFavorite(book: BookEntity) {
         viewModelScope.launch {
             repository.toggleFavorite(book.id, book.isFavorite)
@@ -524,7 +611,11 @@ class BookViewModel(application: Application) : AndroidViewModel(application), T
 
     override fun onCleared() {
         super.onCleared()
-        textToSpeech?.stop()
-        textToSpeech?.shutdown()
+        try {
+            textToSpeech?.stop()
+            textToSpeech?.shutdown()
+        } catch (e: Exception) {
+            android.util.Log.e("BookViewModel", "TTS shutdown error", e)
+        }
     }
 }

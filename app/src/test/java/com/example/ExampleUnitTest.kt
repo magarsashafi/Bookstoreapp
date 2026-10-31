@@ -54,4 +54,20 @@ class ExampleUnitTest {
         assertTrue(categories.contains("Seenaa"))
         assertTrue(categories.contains("Walaloo"))
     }
+
+    @Test
+    fun importedPdfResult_creationAndFields() {
+        val pdfResult = com.example.util.ImportedPdfResult(
+            title = "Aadaa fi Duudhaa Oromoo",
+            author = "Fe'amaa (Uploaded by You)",
+            fileSizeMb = 3.4,
+            pagesCount = 119,
+            content = "# Boqonnaa 1: Seensa\nAadaa boonsaa.",
+            localFilePath = "/data/user/0/com.example/files/pdfs/test.pdf"
+        )
+        assertEquals("Aadaa fi Duudhaa Oromoo", pdfResult.title)
+        assertEquals(3.4, pdfResult.fileSizeMb, 0.01)
+        assertEquals(119, pdfResult.pagesCount)
+        assertTrue(pdfResult.content.contains("Boqonnaa 1"))
+    }
 }

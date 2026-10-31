@@ -19,13 +19,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MonetizationOn
 import androidx.compose.material.icons.filled.Payment
-import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Button
@@ -352,7 +352,7 @@ fun SellerDashboardScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Icon(
-                            imageVector = Icons.Default.ReceiptLong,
+                            imageVector = Icons.AutoMirrored.Filled.ReceiptLong,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.outline,
                             modifier = Modifier.size(48.dp)
@@ -436,8 +436,22 @@ fun SellerDashboardScreen(
                                 Text(
                                     text = txn.transactionRef,
                                     fontSize = 10.sp,
-                                    color = MaterialTheme.colorScheme.outline
+                                    fontFamily = FontFamily.Monospace,
+                                    color = MaterialTheme.colorScheme.primary
                                 )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = Color(0xFF16A34A).copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = "✓ Mirkanaa'eera",
+                                        color = Color(0xFF16A34A),
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                    )
+                                }
                             }
                         }
                     }

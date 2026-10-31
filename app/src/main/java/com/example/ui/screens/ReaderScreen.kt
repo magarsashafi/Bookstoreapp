@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
@@ -97,7 +98,8 @@ fun ReaderScreen(
     onFontSizeDelta: (Int) -> Unit,
     onFontFamilySelected: (ReaderFont) -> Unit,
     onToggleTts: (String) -> Unit,
-    onAddBookmark: (note: String, quote: String) -> Unit
+    onAddBookmark: (note: String, quote: String) -> Unit,
+    onExportPdf: () -> Unit = {}
 ) {
     BackHandler { onBack() }
 
@@ -240,6 +242,18 @@ fun ReaderScreen(
                                 imageVector = Icons.Default.FormatSize,
                                 contentDescription = "Qindeessa",
                                 tint = textColor
+                            )
+                        }
+
+                        // Export as PDF
+                        IconButton(
+                            onClick = onExportPdf,
+                            modifier = Modifier.testTag("reader_export_pdf_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PictureAsPdf,
+                                contentDescription = "PDF Buufadhu",
+                                tint = Color(0xFFDC2626)
                             )
                         }
                     }

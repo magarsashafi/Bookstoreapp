@@ -34,12 +34,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import com.example.data.BookEntity
 import com.example.data.ShelfStatus
 import com.example.ui.components.BookDetailSheet
@@ -87,8 +89,13 @@ fun MainAppScreen(
 
     val bookToBuy by viewModel.bookToBuy.collectAsStateWithLifecycle()
     val isProcessingPurchase by viewModel.isProcessingPurchase.collectAsStateWithLifecycle()
+    val verificationStatusMessage by viewModel.verificationStatusMessage.collectAsStateWithLifecycle()
     val purchaseSuccessTransaction by viewModel.purchaseSuccessTransaction.collectAsStateWithLifecycle()
     val isPublishing by viewModel.isPublishing.collectAsStateWithLifecycle()
+
+    val isGeneratingPdfBookId by viewModel.isGeneratingPdfBookId.collectAsStateWithLifecycle()
+    val isImportingPdf by viewModel.isImportingPdf.collectAsStateWithLifecycle()
+    val coroutineScope = rememberCoroutineScope()
 
     var showSellDialog by remember { mutableStateOf(false) }
     var bookForReview by remember { mutableStateOf<BookEntity?>(null) }
@@ -114,6 +121,11 @@ fun MainAppScreen(
             onAddBookmark = { note, quote ->
                 viewModel.addBookmark(note, quote)
                 Toast.makeText(context, "Qabxiin olkaawameera!", Toast.LENGTH_SHORT).show()
+            },
+            onExportPdf = {
+                viewModel.exportBookAsPdf(context, book) {
+                    Toast.makeText(context, "PDF '${book.title}' buufameera!", Toast.LENGTH_LONG).show()
+                }
             }
         )
     } else {
@@ -225,6 +237,7 @@ fun MainAppScreen(
                             readBooks = readBooks,
                             downloadedBooks = downloadedBooks,
                             initialShelfFilter = librarySelectedShelfFilter,
+                            isImportingPdf = isImportingPdf,
                             onBookClick = { viewModel.openBookDetail(it) },
                             onContinueReading = { viewModel.openReader(it) },
                             onShelfChanged = { book, shelf ->
@@ -234,7 +247,20 @@ fun MainAppScreen(
                             onRateAndReview = { book ->
                                 bookForReview = book
                             },
-                            onRemoveDownload = { viewModel.removeDownload(it) }
+                            onRemoveDownload = { viewModel.removeDownload(it) },
+                            onUploadPdf = { uri ->
+                                coroutineScope.launch {
+                                    val result = com.example.util.PdfManager.importPdfFromUri(context, uri)
+                                    viewModel.importPdfBook(result) {
+                                        Toast.makeText(context, "Kitaabni PDF '${result.title}' kuusaa keessatti fe'ameera!", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            },
+                            onExportPdf = { book ->
+                                viewModel.exportBookAsPdf(context, book) {
+                                    Toast.makeText(context, "PDF '${book.title}' buufameera!", Toast.LENGTH_LONG).show()
+                                }
+                            }
                         )
                     }
                     AppTab.SELLER -> {
@@ -285,6 +311,7 @@ fun MainAppScreen(
             book = book,
             reviews = reviewsForSelectedBook,
             isDownloading = downloadingBookId == book.id,
+            isGeneratingPdf = isGeneratingPdfBookId == book.id,
             onDismiss = { viewModel.closeBookDetail() },
             onRead = {
                 viewModel.closeBookDetail()
@@ -301,6 +328,11 @@ fun MainAppScreen(
             onRemoveDownload = {
                 viewModel.removeDownload(book.id)
                 Toast.makeText(context, "Buufatni haqameera", Toast.LENGTH_SHORT).show()
+            },
+            onExportPdf = {
+                viewModel.exportBookAsPdf(context, book) {
+                    Toast.makeText(context, "PDF '${book.title}' buufameera!", Toast.LENGTH_LONG).show()
+                }
             },
             onToggleFavorite = {
                 viewModel.toggleFavorite(book)
@@ -335,10 +367,11 @@ fun MainAppScreen(
         BuyCheckoutDialog(
             book = book,
             isProcessing = isProcessingPurchase,
+            verificationMessage = verificationStatusMessage,
             successTransaction = purchaseSuccessTransaction,
             onDismiss = { viewModel.dismissBuyFlow() },
-            onConfirmPurchase = { method, buyerName ->
-                viewModel.executePurchase(method, buyerName)
+            onConfirmPurchase = { method, buyerName, phone, refCode ->
+                viewModel.executePurchase(method, buyerName, phone, refCode)
             },
             onReadNow = {
                 viewModel.dismissBuyFlow()

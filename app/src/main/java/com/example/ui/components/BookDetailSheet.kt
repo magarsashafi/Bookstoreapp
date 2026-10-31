@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Star
@@ -68,11 +69,13 @@ fun BookDetailSheet(
     book: BookEntity,
     reviews: List<ReviewEntity>,
     isDownloading: Boolean,
+    isGeneratingPdf: Boolean = false,
     onDismiss: () -> Unit,
     onRead: () -> Unit,
     onBuy: () -> Unit,
     onDownload: () -> Unit,
     onRemoveDownload: () -> Unit,
+    onExportPdf: () -> Unit,
     onToggleFavorite: () -> Unit,
     onShelfChanged: (ShelfStatus) -> Unit,
     onOpenReviewDialog: () -> Unit
@@ -470,6 +473,39 @@ fun BookDetailSheet(
                             imageVector = if (book.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                             contentDescription = "Jaalladhu",
                             tint = if (book.isFavorite) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // Export & Download as PDF document
+                OutlinedButton(
+                    onClick = onExportPdf,
+                    enabled = !isGeneratingPdf,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("download_pdf_button"),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    if (isGeneratingPdf) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("PDF Qopheessaa Jira...")
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.PictureAsPdf,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = Color(0xFFDC2626)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Bifa PDF Buufadhu (Download PDF)",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
                         )
                     }
                 }

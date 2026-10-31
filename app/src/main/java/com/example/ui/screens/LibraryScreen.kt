@@ -1,5 +1,8 @@
 package com.example.ui.screens
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -25,12 +28,16 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FolderSpecial
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material.icons.filled.SdStorage
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -76,12 +83,21 @@ fun LibraryScreen(
     readBooks: List<BookEntity>,
     downloadedBooks: List<BookEntity>,
     initialShelfFilter: String? = null,
+    isImportingPdf: Boolean = false,
     onBookClick: (BookEntity) -> Unit,
     onContinueReading: (BookEntity) -> Unit,
     onShelfChanged: (BookEntity, ShelfStatus) -> Unit,
     onRateAndReview: (BookEntity) -> Unit,
-    onRemoveDownload: (String) -> Unit
+    onRemoveDownload: (String) -> Unit,
+    onUploadPdf: (Uri) -> Unit = {},
+    onExportPdf: (BookEntity) -> Unit = {}
 ) {
+    val pdfPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { onUploadPdf(it) }
+    }
+
     var selectedFilter by remember(initialShelfFilter) {
         val initial = when (initialShelfFilter) {
             "WANT_TO_READ" -> LibrarySubFilter.WANT_TO_READ
@@ -184,6 +200,67 @@ fun LibraryScreen(
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
+                    }
+                }
+            }
+        }
+
+        // PDF Upload Banner & Action
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Kitaaba PDF Fe'adhu (Upload PDF)",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Faayilii PDF meeshaa kee irraa galchiitii kuusaa keetti dubbisi",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    Button(
+                        onClick = { pdfPickerLauncher.launch("application/pdf") },
+                        enabled = !isImportingPdf,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.testTag("upload_pdf_library_button")
+                    ) {
+                        if (isImportingPdf) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Fe'aa jira...", fontSize = 12.sp)
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.UploadFile,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("PDF Fe'i", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
@@ -448,43 +525,59 @@ fun LibraryScreen(
                                 }
                             }
 
-                            // Review / Rating CTA
-                            if (book.shelfStatus == ShelfStatus.READ.name || book.userRating > 0) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable { onRateAndReview(book) }
-                                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                            // Review / Rating & PDF Actions
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(
+                                    onClick = { onExportPdf(book) },
+                                    modifier = Modifier.size(32.dp)
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.Star,
-                                        contentDescription = null,
-                                        tint = Color(0xFFF59E0B),
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text(
-                                        text = if (book.userRating > 0) "${book.userRating} ★ (Yaada)" else "Sadarkaa Kenni",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (book.userRating > 0) Color(0xFFB45309) else MaterialTheme.colorScheme.primary
+                                        imageVector = Icons.Default.PictureAsPdf,
+                                        contentDescription = "PDF Buufadhu",
+                                        tint = Color(0xFFDC2626),
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
-                            } else {
-                                OutlinedButton(
-                                    onClick = { onRateAndReview(book) },
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                    modifier = Modifier.height(28.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.RateReview,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(12.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Yaada Kenni", fontSize = 10.sp)
+
+                                Spacer(modifier = Modifier.width(4.dp))
+
+                                if (book.shelfStatus == ShelfStatus.READ.name || book.userRating > 0) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .clickable { onRateAndReview(book) }
+                                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Star,
+                                            contentDescription = null,
+                                            tint = Color(0xFFF59E0B),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text(
+                                            text = if (book.userRating > 0) "${book.userRating} ★ (Yaada)" else "Sadarkaa Kenni",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (book.userRating > 0) Color(0xFFB45309) else MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                } else {
+                                    OutlinedButton(
+                                        onClick = { onRateAndReview(book) },
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                        modifier = Modifier.height(28.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.RateReview,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Yaada Kenni", fontSize = 10.sp)
+                                    }
                                 }
                             }
                         }

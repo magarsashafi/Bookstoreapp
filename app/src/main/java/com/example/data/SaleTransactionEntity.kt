@@ -13,5 +13,8 @@ data class SaleTransactionEntity(
     val buyerName: String,
     val paymentMethod: String,
     val timestamp: Long = System.currentTimeMillis(),
-    val transactionRef: String
+    val transactionRef: String,
+    val payerPhone: String = "0911223344",
+    val isVerified: Boolean = true,
+    val verificationCode: String = ""
 )

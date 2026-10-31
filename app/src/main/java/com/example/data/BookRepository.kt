@@ -24,16 +24,20 @@ class BookRepository(private val bookDao: BookDao) {
     val userProfile: Flow<UserProfileEntity?> = bookDao.getUserProfile()
 
     suspend fun ensureInitialData() = withContext(Dispatchers.IO) {
-        val count = bookDao.getBooksCount()
-        if (count == 0) {
-            bookDao.insertBooks(InitialBookData.getSampleBooks())
-            bookDao.insertReviews(InitialBookData.getInitialReviews())
-            bookDao.insertUserProfile(InitialBookData.getDefaultProfile())
-        } else {
-            val profile = bookDao.getUserProfileSync()
-            if (profile == null) {
+        try {
+            val count = bookDao.getBooksCount()
+            if (count == 0) {
+                bookDao.insertBooks(InitialBookData.getSampleBooks())
+                bookDao.insertReviews(InitialBookData.getInitialReviews())
                 bookDao.insertUserProfile(InitialBookData.getDefaultProfile())
+            } else {
+                val profile = bookDao.getUserProfileSync()
+                if (profile == null) {
+                    bookDao.insertUserProfile(InitialBookData.getDefaultProfile())
+                }
             }
+        } catch (e: Exception) {
+            android.util.Log.e("BookRepository", "Error ensuring initial data", e)
         }
     }
 
@@ -62,8 +66,19 @@ class BookRepository(private val bookDao: BookDao) {
     suspend fun buyBook(
         book: BookEntity,
         buyerName: String,
-        paymentMethod: String
+        paymentMethod: String,
+        payerPhone: String = "0911223344",
+        customRef: String = ""
     ): SaleTransactionEntity = withContext(Dispatchers.IO) {
+        val ref = if (customRef.isNotBlank()) customRef else {
+            val prefix = when (paymentMethod) {
+                "Telebirr" -> "TLB"
+                "CBE Birr" -> "CBE"
+                "Awash Bank" -> "AWB"
+                else -> "TXN"
+            }
+            "$prefix-${(100000..999999).random()}"
+        }
         val transaction = SaleTransactionEntity(
             id = UUID.randomUUID().toString(),
             bookId = book.id,
@@ -72,7 +87,10 @@ class BookRepository(private val bookDao: BookDao) {
             buyerName = buyerName.ifBlank { "Maamila" },
             paymentMethod = paymentMethod,
             timestamp = System.currentTimeMillis(),
-            transactionRef = "TXN-${System.currentTimeMillis().toString().takeLast(6)}"
+            transactionRef = ref,
+            payerPhone = payerPhone,
+            isVerified = true,
+            verificationCode = (1000..9999).random().toString()
         )
         bookDao.insertTransaction(transaction)
         bookDao.updatePurchaseStatus(book.id, true)
