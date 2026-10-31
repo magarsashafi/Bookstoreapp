@@ -1,0 +1,6 @@
+{
+  "name": "Mana Kitaabaa",
+  "description": "Appilikeeshinii Afaan Oromoo kitaabota kuusuu, dubbisuu, buusuu fi gurguruuf oolu - Kuusaa, Gabaa, fi Dubbisaa ammayyaa.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
